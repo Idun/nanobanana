@@ -3,8 +3,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 元素获取 ---
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
     const body = document.body;
-    const modelSelectorContainer = document.querySelector('.model-selector-container');
-    const modelCards = document.querySelectorAll('.model-card');
+    
+    // [修改] 获取 select 元素
+    const modelSelect = document.getElementById('model-select');
+    
     const nanobananaControls = document.getElementById('nanobanana-controls');
     const modelscopeControls = document.getElementById('modelscope-controls');
     const apiKeyOpenRouterInput = document.getElementById('api-key-input-openrouter');
@@ -37,11 +39,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- 状态变量 ---
     let selectedFiles = [];
-    let currentModel = 'Qwen/Qwen-Image';
+    let currentModel = modelSelect.value; // 初始化为下拉框当前选中的值
     
     const modelStates = {};
-    modelCards.forEach(card => {
-        const modelId = card.dataset.model;
+    // [修改] 基于 select 的 options 初始化状态
+    Array.from(modelSelect.options).forEach(option => {
+        const modelId = option.value;
         modelStates[modelId] = {
             inputs: {
                 prompt: '',
@@ -66,9 +69,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupTheme();
         loadStateForCurrentModel();
         setupInputValidation();
-        setUniformButtonWidth();
-        updateHighlightPosition();
+        // 移除了 setUniformButtonWidth 和 updateHighlightPosition
         setupModalListeners();
+        setupModelSelection(); // 新增下拉框监听
         
         fetch('/api/key-status').then(res => res.json()).then(data => {
             if (data.isSet) { apiKeyOpenRouterInput.parentElement.style.display = 'none'; }
@@ -79,6 +82,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }).catch(error => console.error("无法检查 ModelScope API key 状态:", error));
     }
     
+    // [新增] 下拉框监听设置
+    function setupModelSelection() {
+        modelSelect.addEventListener('change', () => {
+            saveStateForModel(currentModel);
+            currentModel = modelSelect.value;
+            loadStateForCurrentModel();
+        });
+    }
+
     function saveStateForModel(modelId) {
         const state = modelStates[modelId];
         if (!state) return;
@@ -150,17 +162,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (savedTheme) { applyTheme(savedTheme); } else if (prefersDark) { applyTheme('dark'); } else { applyTheme('light'); }
     }
     
-    function setUniformButtonWidth() {
-        let maxWidth = 0;
-        modelCards.forEach(card => { card.style.width = 'auto'; const cardWidth = card.offsetWidth; if (cardWidth > maxWidth) { maxWidth = cardWidth; } });
-        modelCards.forEach(card => { card.style.width = `${maxWidth}px`; });
-        updateHighlightPosition();
-    }
-
-    function updateHighlightPosition() {
-        const activeButton = modelSelectorContainer.querySelector('.model-card.active');
-        if (activeButton) { const left = activeButton.offsetLeft; const width = activeButton.offsetWidth; modelSelectorContainer.style.setProperty('--highlight-left', `${left}px`); modelSelectorContainer.style.setProperty('--highlight-width', `${width}px`); }
-    }
+    // [移除] setUniformButtonWidth 函数
+    // [移除] updateHighlightPosition 函数
 
     function updateActiveModelUI() {
         if (currentModel === 'nanobanana') { nanobananaControls.classList.remove('hidden'); modelscopeControls.classList.add('hidden'); } 
@@ -215,17 +218,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setLoading(isTaskRunning, currentButton, btnText, spinner);
     }
 
-
-    modelCards.forEach(card => {
-        card.addEventListener('click', () => {
-            saveStateForModel(currentModel);
-            currentModel = card.dataset.model;
-            modelCards.forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
-            loadStateForCurrentModel();
-            updateHighlightPosition();
-        });
-    });
+    // [移除] modelCards 的点击事件监听
 
     countButtons.forEach(button => {
         button.addEventListener('click', () => {
@@ -234,7 +227,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
     
-    window.addEventListener('resize', setUniformButtonWidth);
+    // [移除] window resize 监听
 
     generateBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -395,23 +388,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     function updateResultStatus(text) { mainResultImageContainer.innerHTML = `<p>${text}</p>`; resultThumbnailsContainer.innerHTML = ''; }
     function updateResultStatusWithSpinner(text) { mainResultImageContainer.innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; resultThumbnailsContainer.innerHTML = ''; }
     
-    function setLoading(isLoading, btn, btnText, spinner) {
-        btn.disabled = isLoading;
-        btnText.textContent = isLoading ? '正在生成...' : '生成';
-        spinner.classList.toggle('hidden', !isLoading);
+    function setLoading(isLoading， btn， btnText， spinner) {
+        btn。disabled = isLoading;
+        btnText。textContent = isLoading ? '正在生成...' : '生成';
+        spinner。classList。toggle('hidden', !isLoading);
     }
 
-    function fileToBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
+    function fileToBase64(file) { return new Promise((resolve， reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
     function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
     ['dragenter', 'dragover'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.add('drag-over')));
-    ['dragleave', 'drop'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('drag-over')));
-    uploadArea.addEventListener('drop', (e) => handleFiles(Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))));
-    fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files).filter(file => file.type.startsWith('image/'))));
+    ['dragleave'， 'drop']。forEach(eventName => uploadArea.addEventListener(eventName， () => uploadArea.classList.remove('drag-over')));
+    uploadArea。addEventListener('drop'， (e) => handleFiles(Array.from(e。dataTransfer。文件)。filter(file => file。输入.startsWith('image/'))));
+    fileInput。addEventListener('change'， (e) => handleFiles(Array.from(e。target。文件)。filter(file => file.输入.startsWith('image/'))));
     
-    // [修正] 移除 handleFiles 函数中的重置逻辑
     function handleFiles(files) {
-        files.forEach(file => {
-             if (!selectedFiles.some(f => f.name === file.name)) {
+        文件。forEach(file => {
+             if (!selectedFiles.some(f => f。name === file。name)) {
                 selectedFiles.push(file);
                 createThumbnail(file);
              }
@@ -420,13 +412,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function createThumbnail(file) {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader。onload = (e) => {
             const wrapper = document.createElement('div'); wrapper.className = 'thumbnail-wrapper';
             const img = document.createElement('img'); img.src = e.target.result; img.alt = file.name;
             const removeBtn = document.createElement('button'); removeBtn.className = 'remove-btn'; removeBtn.innerHTML = '×';
-            removeBtn.onclick = () => {
-                selectedFiles = selectedFiles.filter(f => f.name !== file.name);
-                wrapper.remove();
+            removeBtn。onclick = () => {
+                selectedFiles = selectedFiles。filter(f => f.name !== file。name);
+                wrapper。remove();
             };
             wrapper.appendChild(img); wrapper.appendChild(removeBtn); thumbnailsContainer.appendChild(wrapper);
         };
