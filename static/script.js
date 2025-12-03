@@ -3,12 +3,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 元素获取 ---
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
     const body = document.body;
-    
-    // 新的选择器元素
-    const modelscopeSelect = document.getElementById('modelscope-select');
-    const nanobananaBtn = document.getElementById('nanobanana-btn');
-    const downloadBtn = document.getElementById('download-btn');
-
+    const modelSelectorContainer = document.querySelector('.model-selector-container');
+    const modelCards = document.querySelectorAll('.model-card');
     const nanobananaControls = document.getElementById('nanobanana-controls');
     const modelscopeControls = document.getElementById('modelscope-controls');
     const apiKeyOpenRouterInput = document.getElementById('api-key-input-openrouter');
@@ -41,15 +37,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- 状态变量 ---
     let selectedFiles = [];
-    let currentModel = modelscopeSelect.value; // 默认使用下拉框的第一个值
-    let currentModelType = 'modelscope'; // 'modelscope' 或 'nanobanana'
+    let currentModel = 'Qwen/Qwen-Image';
     
-    // 收集所有模型ID以初始化状态
-    const allModelIds = Array.from(modelscopeSelect.options).map(opt => opt.value);
-    allModelIds.push('nanobanana');
-
     const modelStates = {};
-    allModelIds.forEach(modelId => {
+    modelCards.forEach(card => {
+        const modelId = card.dataset.model;
         modelStates[modelId] = {
             inputs: {
                 prompt: '',
@@ -72,16 +64,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 初始化函数 ---
     function initialize() {
         setupTheme();
-        
-        // 初始高亮设置
-        modelscopeSelect.parentElement.classList.add('active');
-        nanobananaBtn.classList.remove('active');
-        
         loadStateForCurrentModel();
         setupInputValidation();
+        setUniformButtonWidth();
+        updateHighlightPosition();
         setupModalListeners();
-        setupModelSelectionListeners();
-        setupDownloadButton();
         
         fetch('/api/key-status').then(res => res.json()).then(data => {
             if (data.isSet) { apiKeyOpenRouterInput.parentElement.style.display = 'none'; }
@@ -90,125 +77,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetch('/api/modelscope-key-status').then(res => res.json()).then(data => {
             if (data.isSet) { apiKeyModelScopeInput.parentElement.style.display = 'none'; }
         }).catch(error => console.error("无法检查 ModelScope API key 状态:", error));
-    }
-
-    function setupModelSelectionListeners() {
-        // 定义切换到 ModelScope 模式的逻辑
-        const activateModelScope = () => {
-             if (currentModelType !== 'modelscope') {
-                saveStateForModel(currentModel); // 保存旧模型状态 (NanoBanana)
-                
-                // 切换状态
-                currentModel = modelscopeSelect.value;
-                currentModelType = 'modelscope';
-                
-                // 更新 UI
-                modelscopeSelect.parentElement.classList.add('active');
-                nanobananaBtn.classList.remove('active');
-                
-                loadStateForCurrentModel();
-            }
-        };
-
-        // 监听下拉框的交互
-        // 使用 mousedown 确保在点击时立即切换面板 (提升响应速度)
-        // 同时监听 click 以防止某些设备不触发 mousedown
-        const onSelectInteraction = () => {
-            if (currentModelType !== 'modelscope') {
-                activateModelScope();
-            }
-        };
-
-        modelscopeSelect.addEventListener('mousedown', onSelectInteraction);
-        modelscopeSelect.addEventListener('focus', onSelectInteraction);
-
-        // 下拉框变更事件 (处理模型值改变)
-        modelscopeSelect.addEventListener('change', (e) => {
-            // 确保已经处于 ModelScope 模式
-            if (currentModelType !== 'modelscope') {
-                activateModelScope();
-            }
-
-            // 保存当前 ModelScope 模型的旧状态（可能是 activateModelScope 刚刚加载的那个，或者是用户之前用的那个）
-            saveStateForModel(currentModel);
-            
-            // 更新为新选择的模型
-            currentModel = e.target.value;
-            currentModelType = 'modelscope';
-            
-            // 确保样式正确
-            modelscopeSelect.parentElement.classList.add('active');
-            nanobananaBtn.classList.remove('active');
-            
-            loadStateForCurrentModel();
-        });
-
-        // Nano Banana 按钮点击事件
-        nanobananaBtn.addEventListener('click', () => {
-            if (currentModelType === 'nanobanana') return; // 已经是当前选中状态
-
-            saveStateForModel(currentModel);
-            currentModel = 'nanobanana';
-            currentModelType = 'nanobanana';
-
-            // 样式切换
-            nanobananaBtn.classList.add('active');
-            modelscopeSelect.parentElement.classList.remove('active');
-
-            loadStateForCurrentModel();
-        });
-    }
-
-    function setupDownloadButton() {
-        downloadBtn.addEventListener('click', async () => {
-            const imgElement = mainResultImageContainer.querySelector('img');
-            if (!imgElement) return;
-
-            const imageUrl = imgElement.src;
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `generated-image-${timestamp}.png`;
-
-            try {
-                downloadBtn.disabled = true;
-                downloadBtn.textContent = '下载中...';
-                
-                // 如果是 base64 数据，直接下载
-                if (imageUrl.startsWith('data:')) {
-                     const link = document.createElement('a');
-                     link.href = imageUrl;
-                     link.download = filename;
-                     document.body.appendChild(link);
-                     link.click();
-                     document.body.removeChild(link);
-                } else {
-                    // 对于远程 URL，尝试使用 fetch 获取 blob 
-                    try {
-                        const response = await fetch(imageUrl);
-                        if (!response.ok) throw new Error('网络响应异常');
-                        const blob = await response.blob();
-                        const blobUrl = URL.createObjectURL(blob);
-                        
-                        const link = document.createElement('a');
-                        link.href = blobUrl;
-                        link.download = filename;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        URL.revokeObjectURL(blobUrl);
-                    } catch (fetchErr) {
-                         // 如果 fetch 失败（例如 CORS 问题），回退到新窗口打开
-                         console.warn('CORS下载失败，尝试新窗口打开:', fetchErr);
-                         window.open(imageUrl, '_blank');
-                    }
-                }
-            } catch (err) {
-                console.error('下载过程出错:', err);
-                alert('下载失败，请尝试右键保存图片。');
-            } finally {
-                downloadBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 下载图片';
-                downloadBtn.disabled = false;
-            }
-        });
     }
     
     function saveStateForModel(modelId) {
@@ -225,10 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             state.inputs.steps = parseInt(stepsInput.value, 10);
             state.inputs.guidance = parseFloat(guidanceInput.value);
             state.inputs.seed = parseInt(seedInput.value, 10);
-            const activeCountBtn = modelscopeControls.querySelector('.count-btn.active');
-            if (activeCountBtn) {
-                state.inputs.count = parseInt(activeCountBtn.dataset.count, 10);
-            }
+            state.inputs.count = parseInt(modelscopeControls.querySelector('.count-btn.active').dataset.count, 10);
         }
     }
 
@@ -267,11 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
 
-    function clearResults() { 
-        mainResultImageContainer.innerHTML = `<p>生成的图片将显示在这里</p>`; 
-        resultThumbnailsContainer.innerHTML = ''; 
-        downloadBtn.classList.add('hidden');
-    }
+    function clearResults() { mainResultImageContainer.innerHTML = `<p>生成的图片将显示在这里</p>`; resultThumbnailsContainer.innerHTML = ''; }
     
     function setupModalListeners() {
         closeModalBtn.onclick = () => { fullscreenModal.classList.add('hidden'); };
@@ -289,27 +150,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (savedTheme) { applyTheme(savedTheme); } else if (prefersDark) { applyTheme('dark'); } else { applyTheme('light'); }
     }
     
+    function setUniformButtonWidth() {
+        let maxWidth = 0;
+        modelCards.forEach(card => { card.style.width = 'auto'; const cardWidth = card.offsetWidth; if (cardWidth > maxWidth) { maxWidth = cardWidth; } });
+        modelCards.forEach(card => { card.style.width = `${maxWidth}px`; });
+        updateHighlightPosition();
+    }
+
+    function updateHighlightPosition() {
+        const activeButton = modelSelectorContainer.querySelector('.model-card.active');
+        if (activeButton) { const left = activeButton.offsetLeft; const width = activeButton.offsetWidth; modelSelectorContainer.style.setProperty('--highlight-left', `${left}px`); modelSelectorContainer.style.setProperty('--highlight-width', `${width}px`); }
+    }
 
     function updateActiveModelUI() {
+        if (currentModel === 'nanobanana') { nanobananaControls.classList.remove('hidden'); modelscopeControls.classList.add('hidden'); } 
+        else { nanobananaControls.classList.add('hidden'); modelscopeControls.classList.remove('hidden'); }
+        nanobananaPromptRemark.textContent = ''; modelscopePromptRemark.textContent = ''; modelscopeNegativePromptRemark.textContent = '';
+        
         if (currentModel === 'nanobanana') { 
-            nanobananaControls.classList.remove('hidden'); 
-            modelscopeControls.classList.add('hidden'); 
             nanobananaPromptRemark.textContent = '(支持中文提示词)'; 
         } else { 
-            nanobananaControls.classList.add('hidden'); 
-            modelscopeControls.classList.remove('hidden'); 
-            
-            nanobananaPromptRemark.textContent = ''; 
-
             let remarkText = ''; 
-            // 检查模型是否为 Qwen 系列或 Z-Turbo，这些模型支持中文提示词
-            // 包括 Qwen-Image, Qwen-Edit (ID包含 'Qwen') 以及 Z-Turbo (ID包含 'Z-Image-Turbo')
-            if (currentModel.includes('Qwen') || currentModel.includes('Z-Image-Turbo')) {
-                remarkText = '(支持中文提示词)';
-            } else { 
+            if (currentModel.includes('Qwen') || currentModel.includes('Tongyi')) { 
+                remarkText = '(支持中文提示词)'; 
+            } else if (currentModel.includes('FLUX') || currentModel.includes('Kontext') || currentModel.includes('Krea')) { 
                 remarkText = '(请使用英文提示词)'; 
             } 
-            
             modelscopePromptRemark.textContent = remarkText; 
             modelscopeNegativePromptRemark.textContent = remarkText; 
         }
@@ -350,6 +216,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
 
+    modelCards.forEach(card => {
+        card.addEventListener('click', () => {
+            saveStateForModel(currentModel);
+            currentModel = card.dataset.model;
+            modelCards.forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            loadStateForCurrentModel();
+            updateHighlightPosition();
+        });
+    });
+
     countButtons.forEach(button => {
         button.addEventListener('click', () => {
             countButtons.forEach(btn => btn.classList.remove('active'));
@@ -357,6 +234,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
     
+    window.addEventListener('resize', setUniformButtonWidth);
+
     generateBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const modelToGenerate = currentModel;
@@ -364,7 +243,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alert('当前模型有任务正在生成中，请稍候...');
                 return;
             }
-            // 生成前再次保存当前输入，确保最新
             saveStateForModel(modelToGenerate);
             runGenerationTask(modelToGenerate, btn);
         });
@@ -497,63 +375,44 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function displayResults(imageUrls) {
         if (!imageUrls || imageUrls.length === 0 || !imageUrls[0]) { updateResultStatus("模型没有返回有效的图片URL。"); return; }
-        
-        mainResultImageContainer.innerHTML = ''; 
-        resultThumbnailsContainer.innerHTML = '';
-        
-        // 显示下载按钮
-        downloadBtn.classList.remove('hidden');
-        
+        mainResultImageContainer.innerHTML = ''; resultThumbnailsContainer.innerHTML = '';
         const mainImg = document.createElement('img');
         mainImg.src = imageUrls[0];
         mainImg.onclick = () => openModal(mainImg.src);
         mainResultImageContainer.appendChild(mainImg);
-        
         if (imageUrls.length > 1) {
             imageUrls.forEach((url, index) => {
                 const thumbImg = document.createElement('img');
                 thumbImg.src = url;
                 thumbImg.classList.add('result-thumb');
                 if (index === 0) { thumbImg.classList.add('active'); }
-                thumbImg.addEventListener('click', () => { 
-                    mainImg.src = thumbImg.src; 
-                    document.querySelectorAll('.result-thumb').forEach(t => t.classList.remove('active')); 
-                    thumbImg.classList.add('active'); 
-                });
+                thumbImg.addEventListener('click', () => { mainImg。src = thumbImg。src; document。querySelectorAll('.result-thumb')。forEach(t => t.classList.remove('active')); thumbImg.classList.add('active'); });
                 resultThumbnailsContainer.appendChild(thumbImg);
             });
         }
     }
 
-    function updateResultStatus(text) { 
-        mainResultImageContainer.innerHTML = `<p>${text}</p>`; 
-        resultThumbnailsContainer.innerHTML = ''; 
-        downloadBtn.classList.add('hidden');
-    }
-    
-    function updateResultStatusWithSpinner(text) { 
-        mainResultImageContainer.innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; 
-        resultThumbnailsContainer.innerHTML = ''; 
-        downloadBtn.classList.add('hidden');
-    }
+    function updateResultStatus(text) { mainResultImageContainer.innerHTML = `<p>${text}</p>`; resultThumbnailsContainer.innerHTML = ''; }
+    function updateResultStatusWithSpinner(text) { mainResultImageContainer.innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; resultThumbnailsContainer.innerHTML = ''; }
     
     function setLoading(isLoading, btn, btnText, spinner) {
-        btn.disabled = isLoading;
-        btnText.textContent = isLoading ? '正在生成...' : '生成';
-        spinner.classList.toggle('hidden', !isLoading);
+        btn。disabled = isLoading;
+        btnText。textContent = isLoading ? '正在生成...' : '生成';
+        spinner。classList。toggle('hidden', !isLoading);
     }
 
     function fileToBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
     function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
-    ['dragenter', 'dragover'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.add('drag-over')));
-    ['dragleave', 'drop'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('drag-over')));
+    ['dragenter'， 'dragover']。forEach(eventName => uploadArea.addEventListener(eventName， () => uploadArea.classList.add('drag-over')));
+    ['dragleave'， 'drop']。forEach(eventName => uploadArea.addEventListener(eventName， () => uploadArea.classList.remove('drag-over')));
     uploadArea.addEventListener('drop', (e) => handleFiles(Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))));
-    fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files).filter(file => file.type.startsWith('image/'))));
+    fileInput。addEventListener('change'， (e) => handleFiles(Array.from(e。target。文件)。filter(file => file.输入.startsWith('image/'))));
     
+    // [修正] 移除 handleFiles 函数中的重置逻辑
     function handleFiles(files) {
-        files.forEach(file => {
-             if (!selectedFiles.some(f => f.name === file.name)) {
-                selectedFiles.push(file);
+        文件。forEach(file => {
+             if (!selectedFiles.some(f => f。name === file。name)) {
+                selectedFiles。push(file);
                 createThumbnail(file);
              }
         });
@@ -561,7 +420,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function createThumbnail(file) {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader。onload = (e) => {
             const wrapper = document.createElement('div'); wrapper.className = 'thumbnail-wrapper';
             const img = document.createElement('img'); img.src = e.target.result; img.alt = file.name;
             const removeBtn = document.createElement('button'); removeBtn.className = 'remove-btn'; removeBtn.innerHTML = '×';
