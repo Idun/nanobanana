@@ -93,13 +93,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function setupModelSelectionListeners() {
+        // 定义切换到 ModelScope 模式的逻辑
+        const activateModelScope = () => {
+             if (currentModelType !== 'modelscope') {
+                saveStateForModel(currentModel); // 保存旧模型状态
+                
+                // 切换状态
+                currentModel = modelscopeSelect.value;
+                currentModelType = 'modelscope';
+                
+                // 更新 UI
+                modelscopeSelect.parentElement.classList.add('active');
+                nanobananaBtn.classList.remove('active');
+                
+                loadStateForCurrentModel();
+            }
+        };
+
+        // 监听下拉框的交互
+        // 使用 mousedown 可以在下拉框展开前捕获交互，确保 UI 及时切换
+        modelscopeSelect.addEventListener('mousedown', activateModelScope);
+        // 使用 focus 覆盖键盘操作
+        modelscopeSelect.addEventListener('focus', activateModelScope);
+
         // 下拉框变更事件
         modelscopeSelect.addEventListener('change', (e) => {
+            // 如果已经是 ModelScope 模式且值没变（通常被 mousedown 捕获），则不重复处理
+            // 但如果之前是 Nano Banana，这里也需要确保切换
+            if (currentModelType !== 'modelscope') {
+                activateModelScope();
+            }
+
             saveStateForModel(currentModel);
             currentModel = e.target.value;
             currentModelType = 'modelscope';
             
-            // 样式切换
+            // 样式切换（冗余但安全）
             modelscopeSelect.parentElement.classList.add('active');
             nanobananaBtn.classList.remove('active');
             
@@ -128,29 +157,41 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!imgElement) return;
 
             const imageUrl = imgElement.src;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `generated-image-${timestamp}.png`;
+
             try {
                 downloadBtn.disabled = true;
                 downloadBtn.textContent = '下载中...';
                 
-                // 使用 fetch 获取 blob 以避免跨域直接下载的问题
-                const response = await fetch(imageUrl);
-                const blob = await response.blob();
-                const blobUrl = URL.createObjectURL(blob);
-                
-                const link = document.createElement('a');
-                link.href = blobUrl;
-                
-                // 尝试从 URL 或 Header 获取文件名，这里简单使用时间戳
-                const extension = blob.type.split('/')[1] || 'png';
-                link.download = `generated-${Date.now()}.${extension}`;
-                
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(blobUrl);
+                // 如果是 base64 数据，直接下载
+                if (imageUrl.startsWith('data:')) {
+                     const link = document.createElement('a');
+                     link.href = imageUrl;
+                     link.download = filename;
+                     document.body.appendChild(link);
+                     link.click();
+                     document.body.removeChild(link);
+                } else {
+                    // 对于远程 URL，尝试使用 fetch 获取 blob 
+                    // 注意：这需要服务器支持 CORS，如果 ModelScope 不支持，会进入 catch
+                    const response = await fetch(imageUrl);
+                    if (!response.ok) throw new Error('网络响应异常');
+                    const blob = await response.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(blobUrl);
+                }
             } catch (err) {
-                console.error('下载失败:', err);
-                alert('下载图片失败，请尝试右键保存。');
+                console.warn('直接下载失败，尝试新窗口打开:', err);
+                // 降级方案：在新窗口打开图片
+                window.open(imageUrl, '_blank');
             } finally {
                 downloadBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 下载图片';
                 downloadBtn.disabled = false;
@@ -248,11 +289,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             modelscopeNegativePromptRemark.textContent = '';
 
             let remarkText = ''; 
-            // 检查模型 ID 或其显示文本来决定提示词
-            // Qwen-Edit (ID 包含 Qwen-Image-Edit) 和 Z-Turbo (ID 包含 Z-Image-Turbo) 和 Qwen-Image
+            // 检查模型是否为 Qwen 系列或 Z-Turbo，这些模型支持中文提示词
             if (currentModel.includes('Qwen') || currentModel.includes('Z-Image-Turbo')) {
                 remarkText = '(支持中文提示词)';
-            } else if (currentModel.includes('FLUX') || currentModel.includes('Kontext') || currentModel.includes('Krea')) { 
+            } else { 
                 remarkText = '(请使用英文提示词)'; 
             } 
             
@@ -475,31 +515,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     function updateResultStatus(text) { 
         mainResultImageContainer.innerHTML = `<p>${text}</p>`; 
         resultThumbnailsContainer.innerHTML = ''; 
-        downloadBtn.classList.add('hidden');
+        downloadBtn。classList。add('hidden');
     }
     
     function updateResultStatusWithSpinner(text) { 
-        mainResultImageContainer.innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; 
-        resultThumbnailsContainer.innerHTML = ''; 
-        downloadBtn.classList.add('hidden');
+        mainResultImageContainer。innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; 
+        resultThumbnailsContainer。innerHTML = ''; 
+        downloadBtn。classList。add('hidden');
     }
     
-    function setLoading(isLoading, btn, btnText, spinner) {
-        btn.disabled = isLoading;
-        btnText.textContent = isLoading ? '正在生成...' : '生成';
-        spinner.classList.toggle('hidden', !isLoading);
+    function setLoading(isLoading， btn， btnText, spinner) {
+        btn。disabled = isLoading;
+        btnText。textContent = isLoading ? '正在生成...' : '生成';
+        spinner。classList。toggle('hidden', !isLoading);
     }
 
-    function fileToBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
+    function fileToBase64(file) { return new Promise((resolve， reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
     function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
     ['dragenter', 'dragover'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.add('drag-over')));
-    ['dragleave', 'drop'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('drag-over')));
-    uploadArea.addEventListener('drop', (e) => handleFiles(Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))));
-    fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files).filter(file => file.type.startsWith('image/'))));
+    ['dragleave'， 'drop']。forEach(eventName => uploadArea.addEventListener(eventName， () => uploadArea.classList.remove('drag-over')));
+    uploadArea。addEventListener('drop'， (e) => handleFiles(Array.from(e。dataTransfer。文件)。filter(file => file。输入.startsWith('image/'))));
+    fileInput。addEventListener('change'， (e) => handleFiles(Array.from(e。target。文件)。filter(file => file.输入.startsWith('image/'))));
     
     function handleFiles(files) {
-        files.forEach(file => {
-             if (!selectedFiles.some(f => f.name === file.name)) {
+        文件。forEach(file => {
+             if (!selectedFiles.some(f => f。name === file.name)) {
                 selectedFiles.push(file);
                 createThumbnail(file);
              }
