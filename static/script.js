@@ -3,8 +3,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 元素获取 ---
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
     const body = document.body;
-    const modelSelectorContainer = document.querySelector('.model-selector-container');
-    const modelCards = document.querySelectorAll('.model-card');
+    
+    // 新的选择器元素
+    const modelscopeSelect = document.getElementById('modelscope-select');
+    const nanobananaBtn = document.getElementById('nanobanana-btn');
+    const downloadBtn = document.getElementById('download-btn');
+
     const nanobananaControls = document.getElementById('nanobanana-controls');
     const modelscopeControls = document.getElementById('modelscope-controls');
     const apiKeyOpenRouterInput = document.getElementById('api-key-input-openrouter');
@@ -37,11 +41,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- 状态变量 ---
     let selectedFiles = [];
-    let currentModel = 'Qwen/Qwen-Image';
+    let currentModel = modelscopeSelect.value; // 默认使用下拉框的第一个值
+    let currentModelType = 'modelscope'; // 'modelscope' 或 'nanobanana'
     
+    // 收集所有模型ID以初始化状态
+    const allModelIds = Array.from(modelscopeSelect.options).map(opt => opt.value);
+    allModelIds.push('nanobanana');
+
     const modelStates = {};
-    modelCards.forEach(card => {
-        const modelId = card.dataset.model;
+    allModelIds.forEach(modelId => {
         modelStates[modelId] = {
             inputs: {
                 prompt: '',
@@ -64,11 +72,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 初始化函数 ---
     function initialize() {
         setupTheme();
+        
+        // 初始高亮设置
+        modelscopeSelect.parentElement.classList.add('active');
+        nanobananaBtn.classList.remove('active');
+        
         loadStateForCurrentModel();
         setupInputValidation();
-        setUniformButtonWidth();
-        updateHighlightPosition();
         setupModalListeners();
+        setupModelSelectionListeners();
+        setupDownloadButton();
         
         fetch('/api/key-status').then(res => res.json()).then(data => {
             if (data.isSet) { apiKeyOpenRouterInput.parentElement.style.display = 'none'; }
@@ -77,6 +90,72 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetch('/api/modelscope-key-status').then(res => res.json()).then(data => {
             if (data.isSet) { apiKeyModelScopeInput.parentElement.style.display = 'none'; }
         }).catch(error => console.error("无法检查 ModelScope API key 状态:", error));
+    }
+
+    function setupModelSelectionListeners() {
+        // 下拉框变更事件
+        modelscopeSelect.addEventListener('change', (e) => {
+            saveStateForModel(currentModel);
+            currentModel = e.target.value;
+            currentModelType = 'modelscope';
+            
+            // 样式切换
+            modelscopeSelect.parentElement.classList.add('active');
+            nanobananaBtn.classList.remove('active');
+            
+            loadStateForCurrentModel();
+        });
+
+        // Nano Banana 按钮点击事件
+        nanobananaBtn.addEventListener('click', () => {
+            if (currentModelType === 'nanobanana') return; // 已经是当前选中状态
+
+            saveStateForModel(currentModel);
+            currentModel = 'nanobanana';
+            currentModelType = 'nanobanana';
+
+            // 样式切换
+            nanobananaBtn.classList.add('active');
+            modelscopeSelect.parentElement.classList.remove('active');
+
+            loadStateForCurrentModel();
+        });
+    }
+
+    function setupDownloadButton() {
+        downloadBtn.addEventListener('click', async () => {
+            const imgElement = mainResultImageContainer.querySelector('img');
+            if (!imgElement) return;
+
+            const imageUrl = imgElement.src;
+            try {
+                downloadBtn.disabled = true;
+                downloadBtn.textContent = '下载中...';
+                
+                // 使用 fetch 获取 blob 以避免跨域直接下载的问题
+                const response = await fetch(imageUrl);
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                
+                // 尝试从 URL 或 Header 获取文件名，这里简单使用时间戳
+                const extension = blob.type.split('/')[1] || 'png';
+                link.download = `generated-${Date.now()}.${extension}`;
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(blobUrl);
+            } catch (err) {
+                console.error('下载失败:', err);
+                alert('下载图片失败，请尝试右键保存。');
+            } finally {
+                downloadBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 下载图片';
+                downloadBtn.disabled = false;
+            }
+        });
     }
     
     function saveStateForModel(modelId) {
@@ -132,7 +211,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
 
-    function clearResults() { mainResultImageContainer.innerHTML = `<p>生成的图片将显示在这里</p>`; resultThumbnailsContainer.innerHTML = ''; }
+    function clearResults() { 
+        mainResultImageContainer.innerHTML = `<p>生成的图片将显示在这里</p>`; 
+        resultThumbnailsContainer.innerHTML = ''; 
+        downloadBtn.classList.add('hidden');
+    }
     
     function setupModalListeners() {
         closeModalBtn.onclick = () => { fullscreenModal.classList.add('hidden'); };
@@ -150,32 +233,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (savedTheme) { applyTheme(savedTheme); } else if (prefersDark) { applyTheme('dark'); } else { applyTheme('light'); }
     }
     
-    function setUniformButtonWidth() {
-        let maxWidth = 0;
-        modelCards.forEach(card => { card.style.width = 'auto'; const cardWidth = card.offsetWidth; if (cardWidth > maxWidth) { maxWidth = cardWidth; } });
-        modelCards.forEach(card => { card.style.width = `${maxWidth}px`; });
-        updateHighlightPosition();
-    }
-
-    function updateHighlightPosition() {
-        const activeButton = modelSelectorContainer.querySelector('.model-card.active');
-        if (activeButton) { const left = activeButton.offsetLeft; const width = activeButton.offsetWidth; modelSelectorContainer.style.setProperty('--highlight-left', `${left}px`); modelSelectorContainer.style.setProperty('--highlight-width', `${width}px`); }
-    }
 
     function updateActiveModelUI() {
-        if (currentModel === 'nanobanana') { nanobananaControls.classList.remove('hidden'); modelscopeControls.classList.add('hidden'); } 
-        else { nanobananaControls.classList.add('hidden'); modelscopeControls.classList.remove('hidden'); }
-        nanobananaPromptRemark.textContent = ''; modelscopePromptRemark.textContent = ''; modelscopeNegativePromptRemark.textContent = '';
-        
         if (currentModel === 'nanobanana') { 
+            nanobananaControls.classList.remove('hidden'); 
+            modelscopeControls.classList.add('hidden'); 
             nanobananaPromptRemark.textContent = '(支持中文提示词)'; 
         } else { 
+            nanobananaControls.classList.add('hidden'); 
+            modelscopeControls.classList.remove('hidden'); 
+            
+            nanobananaPromptRemark.textContent = ''; 
+            modelscopePromptRemark.textContent = ''; 
+            modelscopeNegativePromptRemark.textContent = '';
+
             let remarkText = ''; 
-            if (currentModel.includes('Qwen') || currentModel.includes('Tongyi')) { 
-                remarkText = '(支持中文提示词)'; 
+            // 检查模型 ID 或其显示文本来决定提示词
+            // Qwen-Edit (ID 包含 Qwen-Image-Edit) 和 Z-Turbo (ID 包含 Z-Image-Turbo) 和 Qwen-Image
+            if (currentModel.includes('Qwen') || currentModel.includes('Z-Image-Turbo')) {
+                remarkText = '(支持中文提示词)';
             } else if (currentModel.includes('FLUX') || currentModel.includes('Kontext') || currentModel.includes('Krea')) { 
                 remarkText = '(请使用英文提示词)'; 
             } 
+            
             modelscopePromptRemark.textContent = remarkText; 
             modelscopeNegativePromptRemark.textContent = remarkText; 
         }
@@ -216,17 +296,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
 
-    modelCards.forEach(card => {
-        card.addEventListener('click', () => {
-            saveStateForModel(currentModel);
-            currentModel = card.dataset.model;
-            modelCards.forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
-            loadStateForCurrentModel();
-            updateHighlightPosition();
-        });
-    });
-
     countButtons.forEach(button => {
         button.addEventListener('click', () => {
             countButtons.forEach(btn => btn.classList.remove('active'));
@@ -234,7 +303,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
     
-    window.addEventListener('resize', setUniformButtonWidth);
+    // window.addEventListener('resize', setUniformButtonWidth); // 不再需要统一宽度逻辑
 
     generateBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -375,44 +444,63 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function displayResults(imageUrls) {
         if (!imageUrls || imageUrls.length === 0 || !imageUrls[0]) { updateResultStatus("模型没有返回有效的图片URL。"); return; }
-        mainResultImageContainer.innerHTML = ''; resultThumbnailsContainer.innerHTML = '';
+        
+        mainResultImageContainer.innerHTML = ''; 
+        resultThumbnailsContainer.innerHTML = '';
+        
+        // 显示下载按钮
+        downloadBtn.classList.remove('hidden');
+        
         const mainImg = document.createElement('img');
         mainImg.src = imageUrls[0];
         mainImg.onclick = () => openModal(mainImg.src);
         mainResultImageContainer.appendChild(mainImg);
+        
         if (imageUrls.length > 1) {
             imageUrls.forEach((url, index) => {
                 const thumbImg = document.createElement('img');
                 thumbImg.src = url;
                 thumbImg.classList.add('result-thumb');
                 if (index === 0) { thumbImg.classList.add('active'); }
-                thumbImg.addEventListener('click', () => { mainImg.src = thumbImg.src; document.querySelectorAll('.result-thumb').forEach(t => t.classList.remove('active')); thumbImg.classList.add('active'); });
+                thumbImg.addEventListener('click', () => { 
+                    mainImg.src = thumbImg.src; 
+                    document.querySelectorAll('.result-thumb').forEach(t => t.classList.remove('active')); 
+                    thumbImg.classList.add('active'); 
+                });
                 resultThumbnailsContainer.appendChild(thumbImg);
             });
         }
     }
 
-    function updateResultStatus(text) { mainResultImageContainer.innerHTML = `<p>${text}</p>`; resultThumbnailsContainer.innerHTML = ''; }
-    function updateResultStatusWithSpinner(text) { mainResultImageContainer.innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; resultThumbnailsContainer.innerHTML = ''; }
+    function updateResultStatus(text) { 
+        mainResultImageContainer.innerHTML = `<p>${text}</p>`; 
+        resultThumbnailsContainer.innerHTML = ''; 
+        downloadBtn.classList.add('hidden');
+    }
+    
+    function updateResultStatusWithSpinner(text) { 
+        mainResultImageContainer.innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; 
+        resultThumbnailsContainer.innerHTML = ''; 
+        downloadBtn.classList.add('hidden');
+    }
     
     function setLoading(isLoading, btn, btnText, spinner) {
-        btn。disabled = isLoading;
-        btnText。textContent = isLoading ? '正在生成...' : '生成';
+        btn.disabled = isLoading;
+        btnText.textContent = isLoading ? '正在生成...' : '生成';
         spinner.classList.toggle('hidden', !isLoading);
     }
 
     function fileToBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
     function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
-    ['dragenter'， 'dragover']。forEach(eventName => uploadArea.addEventListener(eventName， () => uploadArea.classList.add('drag-over')));
-    ['dragleave'， 'drop']。forEach(eventName => uploadArea.addEventListener(eventName， () => uploadArea.classList.remove('drag-over')));
-    uploadArea。addEventListener('drop'， (e) => handleFiles(Array.from(e。dataTransfer。文件)。filter(file => file。输入.startsWith('image/'))));
-    fileInput。addEventListener('change'， (e) => handleFiles(Array.from(e。target。文件)。filter(file => file.输入.startsWith('image/'))));
+    ['dragenter', 'dragover'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.add('drag-over')));
+    ['dragleave', 'drop'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('drag-over')));
+    uploadArea.addEventListener('drop', (e) => handleFiles(Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))));
+    fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files).filter(file => file.type.startsWith('image/'))));
     
-    // [修正] 移除 handleFiles 函数中的重置逻辑
     function handleFiles(files) {
-        文件。forEach(file => {
+        files.forEach(file => {
              if (!selectedFiles.some(f => f.name === file.name)) {
-                selectedFiles。push(file);
+                selectedFiles.push(file);
                 createThumbnail(file);
              }
         });
@@ -424,11 +512,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             const wrapper = document.createElement('div'); wrapper.className = 'thumbnail-wrapper';
             const img = document.createElement('img'); img.src = e.target.result; img.alt = file.name;
             const removeBtn = document.createElement('button'); removeBtn.className = 'remove-btn'; removeBtn.innerHTML = '×';
-            removeBtn。onclick = () => {
+            removeBtn.onclick = () => {
                 selectedFiles = selectedFiles.filter(f => f.name !== file.name);
                 wrapper.remove();
             };
-            wrapper。appendChild(img); wrapper.appendChild(removeBtn); thumbnailsContainer.appendChild(wrapper);
+            wrapper.appendChild(img); wrapper.appendChild(removeBtn); thumbnailsContainer.appendChild(wrapper);
         };
         reader.readAsDataURL(file);
     }
