@@ -1,7 +1,7 @@
-// --- START OF FILE main.ts ---
-
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { serveDir } from "https://deno.land/std@0.224.0/http/file_server.ts";
+
+declare const Deno: any;
 
 // --- 辅助函数：创建 JSON 错误响应 ---
 function createJsonErrorResponse(message: string, statusCode = 500) {
