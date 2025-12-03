@@ -1,3 +1,4 @@
+
 document.addEventListener('DOMContentLoaded', async () => {
     // --- 元素获取 ---
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
@@ -165,8 +166,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currentModel === 'nanobanana') { nanobananaControls.classList.remove('hidden'); modelscopeControls.classList.add('hidden'); } 
         else { nanobananaControls.classList.add('hidden'); modelscopeControls.classList.remove('hidden'); }
         nanobananaPromptRemark.textContent = ''; modelscopePromptRemark.textContent = ''; modelscopeNegativePromptRemark.textContent = '';
-        if (currentModel === 'nanobanana') { nanobananaPromptRemark.textContent = '(支持中文提示词)'; } 
-        else { let remarkText = ''; if (currentModel === 'Qwen/Qwen-Image') { remarkText = '(支持中文提示词)'; } else if (currentModel.includes('FLUX') || currentModel.includes('Kontext') || currentModel.includes('Krea')) { remarkText = '(请使用英文提示词)'; } modelscopePromptRemark.textContent = remarkText; modelscopeNegativePromptRemark.textContent = remarkText; }
+        
+        if (currentModel === 'nanobanana') { 
+            nanobananaPromptRemark.textContent = '(支持中文提示词)'; 
+        } else { 
+            let remarkText = ''; 
+            if (currentModel.includes('Qwen') || currentModel.includes('Tongyi')) { 
+                remarkText = '(支持中文提示词)'; 
+            } else if (currentModel.includes('FLUX') || currentModel.includes('Kontext') || currentModel.includes('Krea')) { 
+                remarkText = '(请使用英文提示词)'; 
+            } 
+            modelscopePromptRemark.textContent = remarkText; 
+            modelscopeNegativePromptRemark.textContent = remarkText; 
+        }
     }
     
     function setupInputValidation() {
