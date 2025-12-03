@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 定义切换到 ModelScope 模式的逻辑
         const activateModelScope = () => {
              if (currentModelType !== 'modelscope') {
-                saveStateForModel(currentModel); // 保存旧模型状态
+                saveStateForModel(currentModel); // 保存旧模型状态 (NanoBanana)
                 
                 // 切换状态
                 currentModel = modelscopeSelect.value;
@@ -111,24 +111,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         // 监听下拉框的交互
-        // 使用 mousedown 可以在下拉框展开前捕获交互，确保 UI 及时切换
-        modelscopeSelect.addEventListener('mousedown', activateModelScope);
-        // 使用 focus 覆盖键盘操作
-        modelscopeSelect.addEventListener('focus', activateModelScope);
+        // 使用 mousedown 确保在点击时立即切换面板 (提升响应速度)
+        // 同时监听 click 以防止某些设备不触发 mousedown
+        const onSelectInteraction = () => {
+            if (currentModelType !== 'modelscope') {
+                activateModelScope();
+            }
+        };
 
-        // 下拉框变更事件
+        modelscopeSelect.addEventListener('mousedown', onSelectInteraction);
+        modelscopeSelect.addEventListener('focus', onSelectInteraction);
+
+        // 下拉框变更事件 (处理模型值改变)
         modelscopeSelect.addEventListener('change', (e) => {
-            // 如果已经是 ModelScope 模式且值没变（通常被 mousedown 捕获），则不重复处理
-            // 但如果之前是 Nano Banana，这里也需要确保切换
+            // 确保已经处于 ModelScope 模式
             if (currentModelType !== 'modelscope') {
                 activateModelScope();
             }
 
+            // 保存当前 ModelScope 模型的旧状态（可能是 activateModelScope 刚刚加载的那个，或者是用户之前用的那个）
             saveStateForModel(currentModel);
+            
+            // 更新为新选择的模型
             currentModel = e.target.value;
             currentModelType = 'modelscope';
             
-            // 样式切换（冗余但安全）
+            // 确保样式正确
             modelscopeSelect.parentElement.classList.add('active');
             nanobananaBtn.classList.remove('active');
             
@@ -174,24 +182,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                      document.body.removeChild(link);
                 } else {
                     // 对于远程 URL，尝试使用 fetch 获取 blob 
-                    // 注意：这需要服务器支持 CORS，如果 ModelScope 不支持，会进入 catch
-                    const response = await fetch(imageUrl);
-                    if (!response.ok) throw new Error('网络响应异常');
-                    const blob = await response.blob();
-                    const blobUrl = URL.createObjectURL(blob);
-                    
-                    const link = document.createElement('a');
-                    link.href = blobUrl;
-                    link.download = filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(blobUrl);
+                    try {
+                        const response = await fetch(imageUrl);
+                        if (!response.ok) throw new Error('网络响应异常');
+                        const blob = await response.blob();
+                        const blobUrl = URL.createObjectURL(blob);
+                        
+                        const link = document.createElement('a');
+                        link.href = blobUrl;
+                        link.download = filename;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(blobUrl);
+                    } catch (fetchErr) {
+                         // 如果 fetch 失败（例如 CORS 问题），回退到新窗口打开
+                         console.warn('CORS下载失败，尝试新窗口打开:', fetchErr);
+                         window.open(imageUrl, '_blank');
+                    }
                 }
             } catch (err) {
-                console.warn('直接下载失败，尝试新窗口打开:', err);
-                // 降级方案：在新窗口打开图片
-                window.open(imageUrl, '_blank');
+                console.error('下载过程出错:', err);
+                alert('下载失败，请尝试右键保存图片。');
             } finally {
                 downloadBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 下载图片';
                 downloadBtn.disabled = false;
@@ -213,7 +225,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             state.inputs.steps = parseInt(stepsInput.value, 10);
             state.inputs.guidance = parseFloat(guidanceInput.value);
             state.inputs.seed = parseInt(seedInput.value, 10);
-            state.inputs.count = parseInt(modelscopeControls.querySelector('.count-btn.active').dataset.count, 10);
+            const activeCountBtn = modelscopeControls.querySelector('.count-btn.active');
+            if (activeCountBtn) {
+                state.inputs.count = parseInt(activeCountBtn.dataset.count, 10);
+            }
         }
     }
 
@@ -285,11 +300,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             modelscopeControls.classList.remove('hidden'); 
             
             nanobananaPromptRemark.textContent = ''; 
-            modelscopePromptRemark.textContent = ''; 
-            modelscopeNegativePromptRemark.textContent = '';
 
             let remarkText = ''; 
             // 检查模型是否为 Qwen 系列或 Z-Turbo，这些模型支持中文提示词
+            // 包括 Qwen-Image, Qwen-Edit (ID包含 'Qwen') 以及 Z-Turbo (ID包含 'Z-Image-Turbo')
             if (currentModel.includes('Qwen') || currentModel.includes('Z-Image-Turbo')) {
                 remarkText = '(支持中文提示词)';
             } else { 
@@ -343,8 +357,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
     
-    // window.addEventListener('resize', setUniformButtonWidth); // 不再需要统一宽度逻辑
-
     generateBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const modelToGenerate = currentModel;
@@ -352,6 +364,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alert('当前模型有任务正在生成中，请稍候...');
                 return;
             }
+            // 生成前再次保存当前输入，确保最新
             saveStateForModel(modelToGenerate);
             runGenerationTask(modelToGenerate, btn);
         });
@@ -515,31 +528,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     function updateResultStatus(text) { 
         mainResultImageContainer.innerHTML = `<p>${text}</p>`; 
         resultThumbnailsContainer.innerHTML = ''; 
-        downloadBtn。classList。add('hidden');
+        downloadBtn.classList.add('hidden');
     }
     
     function updateResultStatusWithSpinner(text) { 
-        mainResultImageContainer。innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; 
-        resultThumbnailsContainer。innerHTML = ''; 
-        downloadBtn。classList。add('hidden');
+        mainResultImageContainer.innerHTML = `<div class="loading-spinner"></div><p>${text}</p>`; 
+        resultThumbnailsContainer.innerHTML = ''; 
+        downloadBtn.classList.add('hidden');
     }
     
-    function setLoading(isLoading， btn， btnText, spinner) {
-        btn。disabled = isLoading;
-        btnText。textContent = isLoading ? '正在生成...' : '生成';
-        spinner。classList。toggle('hidden', !isLoading);
+    function setLoading(isLoading, btn, btnText, spinner) {
+        btn.disabled = isLoading;
+        btnText.textContent = isLoading ? '正在生成...' : '生成';
+        spinner.classList.toggle('hidden', !isLoading);
     }
 
-    function fileToBase64(file) { return new Promise((resolve， reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
+    function fileToBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
     function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
     ['dragenter', 'dragover'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.add('drag-over')));
-    ['dragleave'， 'drop']。forEach(eventName => uploadArea.addEventListener(eventName， () => uploadArea.classList.remove('drag-over')));
-    uploadArea。addEventListener('drop'， (e) => handleFiles(Array.from(e。dataTransfer。文件)。filter(file => file。输入.startsWith('image/'))));
-    fileInput。addEventListener('change'， (e) => handleFiles(Array.from(e。target。文件)。filter(file => file.输入.startsWith('image/'))));
+    ['dragleave', 'drop'].forEach(eventName => uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('drag-over')));
+    uploadArea.addEventListener('drop', (e) => handleFiles(Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))));
+    fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files).filter(file => file.type.startsWith('image/'))));
     
     function handleFiles(files) {
-        文件。forEach(file => {
-             if (!selectedFiles.some(f => f。name === file.name)) {
+        files.forEach(file => {
+             if (!selectedFiles.some(f => f.name === file.name)) {
                 selectedFiles.push(file);
                 createThumbnail(file);
              }
