@@ -1,3 +1,4 @@
+
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 
 /* 主题颜色变量 */
@@ -89,57 +90,10 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-top: 0;
-    margin-bottom: 0.75rem;
+    margin-bottom: 2rem; /* 增加底部间距以替代之前的 selector 占位 */
 }
 
-/* 模型选择器样式 */
-.model-selector-container {
-    display: inline-flex;
-    background-color: var(--surface-color);
-    border: 1px solid var(--surface-border-color);
-    box-shadow: 0 8px 32px var(--shadow-color);
-    border-radius: 24px;
-    padding: 4px;
-    position: relative;
-    margin-bottom: 2rem;
-    transition: background-color 0.3s, border-color 0.3s;
-}
-
-.model-selector-container::before {
-    content: '';
-    position: absolute;
-    top: 4px;
-    left: var(--highlight-left, 4px);
-    width: var(--highlight-width, 0px);
-    height: calc(100% - 8px);
-    background-color: var(--highlight-bg-color);
-    border-radius: 20px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    z-index: 1;
-}
-
-.model-card {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 0.6rem 1.25rem;
-    cursor: pointer;
-    font-weight: 500;
-    white-space: nowrap;
-    position: relative;
-    z-index: 2;
-    color: var(--text-color-secondary);
-    transition: color 0.3s ease;
-    border-radius: 20px;
-    background: none;
-    border: none;
-    margin: 0;
-}
-
-.model-card.active {
-    color: var(--text-color-primary);
-}
+/* [移除] model-selector-container 和 model-card 样式 */
 
 .main-container {
     display: flex;
@@ -182,7 +136,8 @@ h2 {
     align-items: center;
 }
 
-.api-key-section, .upload-section, .prompt-section {
+/* [新增] model-section 样式 */
+.model-section, .api-key-section, .upload-section, .prompt-section {
     margin-bottom: 1.2rem;
 }
 
@@ -327,7 +282,6 @@ select {
     .main-container { flex-direction: column; }
     .controls-container { max-width: none; }
     body { padding: 1rem; }
-    .model-selector-container { flex-direction: column; border-radius: 12px; box-shadow: none; border: 1px solid var(--border-color); }
-    .model-card { border-radius: 0; }
+    /* [移除] .model-selector-container 相关样式 */
     #theme-toggle-btn { top: 1rem; right: 1rem; }
 }
